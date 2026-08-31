@@ -1,0 +1,15 @@
+{
+  "name": "nebo-closers",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cotizador y comisiones — Nebo y Closers",
+  "scripts": {
+    "start": "serve . --listen tcp://0.0.0.0:${PORT:-3000} --single --no-clipboard"
+  },
+  "dependencies": {
+    "serve": "^14.2.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
