@@ -42,6 +42,7 @@ body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:
 .cmx{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap;user-select:none}
 .cmx input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;margin:0}
 .cmx:hover{color:var(--ink)}
+.inc{display:flex;gap:12px}
 .pre{display:flex;align-items:center;gap:7px;white-space:nowrap}
 .pre span{font-size:11.5px;color:var(--muted)}
 .pre select{font-size:12.5px;padding:5px 7px;max-width:158px}
@@ -276,6 +277,9 @@ body:not(.entrando) .bar,body:not(.entrando) .grid{visibility:hidden}
       <div class="big"><span class="t">Implementación</span><span class="v" id="totImpl">$1,500</span></div>
     </div>
     <div class="res">
+      <div class="line"><span>Consumo incluido</span><span class="inc">
+        <label class="cmx"><input type="checkbox" id="incMsg" checked><span>Mensajes</span></label>
+        <label class="cmx"><input type="checkbox" id="incMin" checked><span>Minutos</span></label></span></div>
       <div class="line"><span>Plan mensual</span><span class="v num" id="lPlan">$0</span></div>
       <div class="line"><span>Mantenimiento</span><span class="v num" id="lMant">$0</span></div>
       <div class="line"><span id="mensN">Módulos contratados</span><span class="v num" id="mensX">$0</span></div>
@@ -332,6 +336,24 @@ const PLANES={
  arranque:{nom:'Arranque',plan:217,mant:133,msg:2000,min:80},
  crecimiento:{nom:'Crecimiento',plan:647,mant:390,msg:6000,min:250},
  empresa:{nom:'Empresa',plan:1297,mant:764,msg:12000,min:550}};
+
+/* Precio por unidad de consumo. Es el mismo que se cobra como excedente y el que se
+   descuenta del plan cuando el cliente no quiere la bolsa de mensajes o de minutos. */
+const TARIFA={msg:0.05,min:0.42};
+
+function precioPlan(p){
+  let t=p.plan;
+  if(!state.inc.msg) t-=p.msg*TARIFA.msg;
+  if(!state.inc.min) t-=p.min*TARIFA.min;
+  return Math.round(t*100)/100;
+}
+function textoIncluye(p){
+  const msg=`${p.msg.toLocaleString('en-US')} mensajes`, min=`${p.min} minutos`;
+  if(state.inc.msg&&state.inc.min) return `${msg} y ${min} al mes`;
+  if(state.inc.msg) return `${msg} al mes, sin minutos de voz`;
+  if(state.inc.min) return `${min} al mes, sin mensajes`;
+  return 'sin mensajes ni minutos incluidos';
+}
 
 const COLS=[
 [{g:'Implementación · alcance',tipo:'i',items:[
@@ -403,7 +425,7 @@ const ESTANDAR={plan:'empresa',v:{
   u_op:12, u_ad:2, u_sl:3, u_app:8, suc_m:2,
   c_ig:1, c_fb:1, c_web:1, a_voz:1,
   sop:130, m_bd:1, m_pbx:1, alm:55, n_loc:2}};
-const state={plan:ESTANDAR.plan,v:{...ESTANDAR.v}};
+const state={plan:ESTANDAR.plan,v:{...ESTANDAR.v},inc:{msg:true,min:true}};
 const COM={impl:10,mant:15};
 const money=n=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2});
 
@@ -421,10 +443,14 @@ const PRESETS=[
                                                        m_bd:1,m_pbx:1,alm:55,n_loc:2}}
 ];
 const selPre=document.getElementById('preset');
+const inMsg=document.getElementById('incMsg'), inMin=document.getElementById('incMin');
+inMsg.onchange=()=>{state.inc.msg=inMsg.checked;tocado();renderPlanes();calc()};
+inMin.onchange=()=>{state.inc.min=inMin.checked;tocado();renderPlanes();calc()};
 PRESETS.forEach((p,i)=>{const o=document.createElement('option');o.value=i;o.textContent=p.nom;selPre.appendChild(o)});
 function aplicarPreset(i){
   const p=PRESETS[i];
-  state.plan=p.plan; state.v={...p.v};
+  state.plan=p.plan; state.v={...p.v}; state.inc={msg:true,min:true};
+  inMsg.checked=true; inMin.checked=true;
   renderPlanes();renderCol(COLS[0],'c1');renderCol(COLS[1],'c2');renderCol(COLS[2],'c3');calc();
   selPre.value=i;
 }
@@ -436,7 +462,7 @@ function renderPlanes(){
   for(const[k,p]of Object.entries(PLANES)){
     const b=document.createElement('button');b.className='pbtn';b.type='button';
     b.setAttribute('aria-pressed',state.plan===k);
-    b.innerHTML=`<b>${p.nom}</b><span>${money(p.plan+p.mant)}</span>`;
+    b.innerHTML=`<b>${p.nom}</b><span>${money(precioPlan(p)+p.mant)}</span>`;
     b.onclick=()=>{state.plan=k;tocado();renderPlanes();calc()};
     c.appendChild(b);
   }
@@ -494,14 +520,14 @@ function sum(defs){
 function calc(){
   const p=PLANES[state.plan];
   document.getElementById('planName').textContent=
-    `Plan ${p.nom} — ${p.msg.toLocaleString('en-US')} mensajes y ${p.min} minutos al mes`;
-  const si=sum(IMPL), sm=sum(MENS);
-  const impl=1500+si.t, mens=p.plan+p.mant+sm.t;
+    `Plan ${p.nom} — ${textoIncluye(p)}`;
+  const si=sum(IMPL), sm=sum(MENS), plan=precioPlan(p);
+  const impl=1500+si.t, mens=plan+p.mant+sm.t;
 
   document.getElementById('implN').textContent=si.n?`Partidas adicionales (${si.n})`:'Sin partidas adicionales';
   document.getElementById('implX').textContent=money(si.t);
   document.getElementById('totImpl').textContent=money(impl);
-  document.getElementById('lPlan').textContent=money(p.plan);
+  document.getElementById('lPlan').textContent=money(plan);
   document.getElementById('lMant').textContent=money(p.mant);
   document.getElementById('mensN').textContent=sm.n?`Módulos contratados (${sm.n})`:'Sin módulos adicionales';
   document.getElementById('mensX').textContent=money(sm.t);
@@ -573,7 +599,9 @@ function buildDoc(modo){
   const cli=(document.getElementById('cliente').value||'').trim();
   const fecha=new Date().toLocaleDateString('es-DO',{day:'numeric',month:'long',year:'numeric'});
   const di=[['Paquete estándar de implementación','1',1500,1500],...detail(IMPL)];
-  const dm=[[`Plan ${p.nom}`,'1',p.plan,p.plan],['Mantenimiento mensual','1',p.mant,p.mant],...detail(MENS)];
+  const plan=precioPlan(p), sinMsg=!state.inc.msg, sinMin=!state.inc.min;
+  const nomPlan=`Plan ${p.nom}`+(sinMsg&&sinMin?' sin mensajes ni minutos':sinMsg?' sin mensajes':sinMin?' sin minutos':'');
+  const dm=[[nomPlan,'1',plan,plan],['Mantenimiento mensual','1',p.mant,p.mant],...detail(MENS)];
   const ti=di.reduce((a,x)=>a+x[3],0), tm=dm.reduce((a,x)=>a+x[3],0);
   const cI=ti*COM.impl/100, cM=p.mant*COM.mant/100;
 
@@ -582,7 +610,7 @@ function buildDoc(modo){
       <div class="s">Agentes de inteligencia artificial · Plan ${p.nom}</div></div>
       <div class="meta"><b>${cli||'Cliente: ____________________'}</b><br>${fecha}<br>
       ${modo==='canal'?'Documento interno del closer':'Cotización comercial'}</div></div>`;
-  h+=`<p class="note" style="margin-top:12px">El plan ${p.nom} incluye ${p.msg.toLocaleString('en-US')} mensajes salientes y ${p.min} minutos de voz al mes, una cuenta, una sucursal, un número de WhatsApp, un usuario administrador y 5 GB de almacenamiento.</p>`;
+  h+=`<p class="note" style="margin-top:12px">El plan ${p.nom} incluye ${sinMsg?'':p.msg.toLocaleString('en-US')+' mensajes salientes al mes, '}${sinMin?'':p.min+' minutos de voz al mes, '}una cuenta, una sucursal, un número de WhatsApp, un usuario administrador y 5 GB de almacenamiento.</p>`;
   h+=tabla('Implementación · pago único',di,ti,'Total de implementación');
   h+=tabla('Servicio mensual',dm,tm,'Total mensual');
   h+=`<div class="com solo-canal"><h4>Comisión del closer</h4><table><tbody>
@@ -592,7 +620,7 @@ function buildDoc(modo){
       <tr><td>Recurrente cada año siguiente</td><td class="n">${money(cM*12)}</td></tr>
       </tbody></table>
       <p class="note" style="margin-top:6px">El plan mensual, el almacenamiento, los números, los excedentes de consumo y los módulos de servicio quedan fuera de la base comisionable por tratarse de traslado de costo de terceros. La comisión se calcula sobre montos efectivamente cobrados.</p></div>`;
-  h+=`<p class="note"><b>Consumo y excedentes.</b> Mensaje saliente adicional $0.05; minuto de voz adicional $0.42. Se contabilizan únicamente los mensajes que envía el agente. En voz se cuentan llamadas entrantes y salientes en una misma bolsa, con redondeo al minuto. Los mensajes y minutos no consumidos no se acumulan de un mes a otro ni son reembolsables.<br>
+  h+=`<p class="note"><b>Consumo y excedentes.</b> ${sinMsg?`El plan no incluye bolsa de mensajes: cada mensaje saliente se factura a ${money(TARIFA.msg)}`:`Mensaje saliente adicional ${money(TARIFA.msg)}`}; ${sinMin?`no incluye bolsa de minutos: cada minuto de voz se factura a ${money(TARIFA.min)}`:`minuto de voz adicional ${money(TARIFA.min)}`}. Se contabilizan únicamente los mensajes que envía el agente. En voz se cuentan llamadas entrantes y salientes en una misma bolsa, con redondeo al minuto. Los mensajes y minutos no consumidos no se acumulan de un mes a otro ni son reembolsables.<br>
   <b>Condiciones de pago.</b> Implementación, 100% antes de iniciar. Primer mes de plan y mantenimiento a la puesta en marcha; los siguientes por adelantado dentro de los primeros cinco días de cada mes. Excedentes facturados al cierre de mes.<br>
   <b>Plazo.</b> Siete días hábiles desde la recepción del pago y de la información y accesos requeridos.</p>`;
   h+=`<div class="sig"><div>Por NEBO AI</div><div>${cli?'Por '+cli:'Por el cliente'}</div></div>`;
