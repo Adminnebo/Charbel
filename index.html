@@ -39,6 +39,7 @@ body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:
 .pdf:hover{background:var(--soft);color:var(--accent)}
 .cli{border:1px solid var(--rule);border-radius:4px;padding:6px 9px;font:inherit;font-size:12.5px;width:130px;background:#fff;color:inherit}
 .cli:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.cli.qty{width:84px;padding:3px 7px;text-align:right;font-variant-numeric:tabular-nums}
 .cmx{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap;user-select:none}
 .cmx input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;margin:0}
 .cmx:hover{color:var(--ink)}
@@ -272,14 +273,16 @@ body:not(.entrando) .bar,body:not(.entrando) .grid{visibility:hidden}
   <div class="col">
     <div class="res">
       <div class="k" id="planName">Plan</div>
-      <div class="line"><span>Paquete estándar de implementación</span><span class="v">$1,500</span></div>
+      <div class="line"><span id="implBaseN">Paquete de implementación</span><span class="v num" id="implBase">$1,500</span></div>
+      <div class="line"><span>Upgrade desde <select id="desde" aria-label="Plan que el cliente ya tiene"></select></span><span class="v num" id="implUpg">$0</span></div>
       <div class="line"><span id="implN">Partidas adicionales</span><span class="v num" id="implX">$0</span></div>
       <div class="big"><span class="t">Implementación</span><span class="v" id="totImpl">$1,500</span></div>
     </div>
     <div class="res">
-      <div class="line"><span>Consumo incluido</span><span class="inc">
-        <label class="cmx"><input type="checkbox" id="incMsg" checked><span>Mensajes</span></label>
-        <label class="cmx"><input type="checkbox" id="incMin" checked><span>Minutos</span></label></span></div>
+      <div class="line"><span>Mensajes al mes</span><span class="inc">
+        <input class="cli qty" id="cantMsg" inputmode="numeric" aria-label="Mensajes incluidos al mes"></span></div>
+      <div class="line"><span>Minutos de voz al mes</span><span class="inc">
+        <input class="cli qty" id="cantMin" inputmode="numeric" aria-label="Minutos de voz incluidos al mes"></span></div>
       <div class="line"><span>Plan mensual</span><span class="v num" id="lPlan">$0</span></div>
       <div class="line"><span>Mantenimiento</span><span class="v num" id="lMant">$0</span></div>
       <div class="line"><span id="mensN">Módulos contratados</span><span class="v num" id="mensX">$0</span></div>
@@ -333,25 +336,28 @@ document.getElementById('salir').onclick=()=>{
 inUsr.focus();
 
 const PLANES={
- arranque:{nom:'Arranque',plan:217,mant:133,msg:2000,min:80},
- crecimiento:{nom:'Crecimiento',plan:647,mant:390,msg:6000,min:250},
- empresa:{nom:'Empresa',plan:1297,mant:764,msg:12000,min:550}};
+ arranque:{nom:'Arranque',plan:217,mant:133,msg:2000,min:80,impl:255},
+ crecimiento:{nom:'Crecimiento',plan:647,mant:390,msg:6000,min:250,impl:755},
+ empresa:{nom:'Empresa',plan:1297,mant:764,msg:12000,min:550,impl:1500}};
+/* impl: el paquete de implementación. Empresa es la referencia de $1,500 y los demás
+   pagan en proporción a su mensualidad (plan + mantenimiento), redondeado a $5. */
 
 /* Precio por unidad de consumo. Es el mismo que se cobra como excedente y el que se
-   descuenta del plan cuando el cliente no quiere la bolsa de mensajes o de minutos. */
+   suma o descuenta del plan por cada mensaje o minuto de más o de menos en la bolsa. */
 const TARIFA={msg:0.05,min:0.42};
 
+/* Bolsa elegida: null es la del plan; un número la reemplaza y vale para cualquier plan. */
+const cant=(p,k)=>state.cant[k]??p[k];
 function precioPlan(p){
-  let t=p.plan;
-  if(!state.inc.msg) t-=p.msg*TARIFA.msg;
-  if(!state.inc.min) t-=p.min*TARIFA.min;
-  return Math.round(t*100)/100;
+  const t=p.plan+(cant(p,'msg')-p.msg)*TARIFA.msg+(cant(p,'min')-p.min)*TARIFA.min;
+  return Math.max(0,Math.round(t*100)/100);
 }
 function textoIncluye(p){
-  const msg=`${p.msg.toLocaleString('en-US')} mensajes`, min=`${p.min} minutos`;
-  if(state.inc.msg&&state.inc.min) return `${msg} y ${min} al mes`;
-  if(state.inc.msg) return `${msg} al mes, sin minutos de voz`;
-  if(state.inc.min) return `${min} al mes, sin mensajes`;
+  const m=cant(p,'msg'), v=cant(p,'min');
+  const msg=`${m.toLocaleString('en-US')} mensajes`, min=`${v.toLocaleString('en-US')} minutos`;
+  if(m&&v) return `${msg} y ${min} al mes`;
+  if(m) return `${msg} al mes, sin minutos de voz`;
+  if(v) return `${min} al mes, sin mensajes`;
   return 'sin mensajes ni minutos incluidos';
 }
 
@@ -395,7 +401,10 @@ const COLS=[
   {id:'consol',n:'Panel consolidado multi-sede',p:120,t:'c'},
   {id:'reglas',n:'Precios por sucursal',p:60,t:'c'}]}],
 
-[{g:'Soporte',tipo:'m',items:[
+[{g:'Productos adicionales',tipo:'m',items:[
+  {id:'jarvis',n:'Jarvis · asistente con voz',p:99,t:'c'},
+  {id:'mkt',n:'Marketing Studio',p:149,t:'c'}]},
+ {g:'Soporte',tipo:'m',items:[
   {id:'sop',n:'Nivel',t:'s',opts:[{v:0,n:'Básico 48 h (incl.)'},{v:65,n:'Estándar 24 h · $65'},{v:130,n:'Prioritario 8 h · $130'},{v:290,n:'Crítico 4 h · $290'}]},
   {id:'fuera',n:'Fuera de horario y fin de semana',p:180,t:'c'},
   {id:'audit',n:'Auditoría de calidad',p:250,t:'c'}]},
@@ -425,9 +434,9 @@ const ESTANDAR={plan:'empresa',v:{
   u_op:12, u_ad:2, u_sl:3, u_app:8, suc_m:2,
   c_ig:1, c_fb:1, c_web:1, a_voz:1,
   sop:130, m_bd:1, m_pbx:1, alm:55, n_loc:2}};
-const state={plan:ESTANDAR.plan,v:{...ESTANDAR.v},inc:{msg:true,min:true}};
+const state={plan:ESTANDAR.plan,v:{...ESTANDAR.v},cant:{msg:null,min:null},desde:''};
 const COM={impl:10,mant:15};
-const money=n=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2});
+const money=n=>(n<0?'−$':'$')+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2});
 
 
 const PRESETS=[
@@ -443,14 +452,23 @@ const PRESETS=[
                                                        m_bd:1,m_pbx:1,alm:55,n_loc:2}}
 ];
 const selPre=document.getElementById('preset');
-const inMsg=document.getElementById('incMsg'), inMin=document.getElementById('incMin');
-inMsg.onchange=()=>{state.inc.msg=inMsg.checked;tocado();renderPlanes();calc()};
-inMin.onchange=()=>{state.inc.min=inMin.checked;tocado();renderPlanes();calc()};
+const inCant={msg:document.getElementById('cantMsg'),min:document.getElementById('cantMin')};
+function renderCant(){
+  const p=PLANES[state.plan];
+  for(const k in inCant) if(document.activeElement!==inCant[k]) inCant[k].value=cant(p,k).toLocaleString('en-US');
+}
+for(const k in inCant){
+  inCant[k].oninput=()=>{
+    const d=inCant[k].value.replace(/\D/g,'');
+    state.cant[k]=d===''?null:Math.min(9999999,+d);
+    tocado();renderPlanes();calc();
+  };
+  inCant[k].onblur=renderCant;
+}
 PRESETS.forEach((p,i)=>{const o=document.createElement('option');o.value=i;o.textContent=p.nom;selPre.appendChild(o)});
 function aplicarPreset(i){
   const p=PRESETS[i];
-  state.plan=p.plan; state.v={...p.v}; state.inc={msg:true,min:true};
-  inMsg.checked=true; inMin.checked=true;
+  state.plan=p.plan; state.v={...p.v}; state.cant={msg:null,min:null}; state.desde='';
   renderPlanes();renderCol(COLS[0],'c1');renderCol(COLS[1],'c2');renderCol(COLS[2],'c3');calc();
   selPre.value=i;
 }
@@ -466,7 +484,22 @@ function renderPlanes(){
     b.onclick=()=>{state.plan=k;tocado();renderPlanes();calc()};
     c.appendChild(b);
   }
+  renderDesde();
 }
+
+/* Upgrade: el cliente ya pagó la implementación de un plan menor y solo paga la diferencia.
+   Solo se ofrecen los planes por debajo del elegido. */
+const selDesde=document.getElementById('desde');
+function renderDesde(){
+  const claves=Object.keys(PLANES), menores=claves.slice(0,claves.indexOf(state.plan));
+  if(!menores.includes(state.desde)) state.desde='';
+  selDesde.innerHTML='<option value="">Cliente nuevo</option>'+
+    menores.map(k=>`<option value="${k}">Plan ${PLANES[k].nom}</option>`).join('');
+  selDesde.value=state.desde;
+  selDesde.disabled=!menores.length;
+}
+selDesde.onchange=()=>{state.desde=selDesde.value;tocado();calc()};
+const credito=()=>state.desde?PLANES[state.desde].impl:0;
 
 function renderCol(defs,host){
   const c=document.getElementById(host);c.innerHTML='';
@@ -519,10 +552,14 @@ function sum(defs){
 
 function calc(){
   const p=PLANES[state.plan];
+  renderCant();
   document.getElementById('planName').textContent=
     `Plan ${p.nom} — ${textoIncluye(p)}`;
   const si=sum(IMPL), sm=sum(MENS), plan=precioPlan(p);
-  const impl=1500+si.t, mens=plan+p.mant+sm.t;
+  const impl=p.impl-credito()+si.t, mens=plan+p.mant+sm.t;
+  document.getElementById('implBaseN').textContent=`Paquete de implementación ${p.nom}`;
+  document.getElementById('implBase').textContent=money(p.impl);
+  document.getElementById('implUpg').textContent=money(-credito());
 
   document.getElementById('implN').textContent=si.n?`Partidas adicionales (${si.n})`:'Sin partidas adicionales';
   document.getElementById('implX').textContent=money(si.t);
@@ -567,6 +604,7 @@ const DOCN={horas:'Horas de implementación adicionales',can_i:'Habilitación de
  u_op:'Usuario operador del panel',u_ad:'Usuario administrador adicional',u_sl:'Usuario de solo lectura',
  u_app:'Licencia de app móvil',cta_m:'Cuenta o razón social adicional',reglas:'Reglas de precio por sucursal',
  consol:'Panel consolidado multi-sede',cta_i:'Alta de cuenta o razón social',
+ jarvis:'Jarvis: asistente con voz, memoria y consulta a sus datos',mkt:'Marketing Studio',
  sop:'Nivel de soporte',fuera:'Cobertura fuera de horario y fin de semana',audit:'Auditoría de calidad del agente',
  m_std:'Mantenimiento de conector estándar',m_bd:'Mantenimiento de conector a base de datos',
  m_pbx:'Mantenimiento de conexión a central telefónica',m_erp:'Mantenimiento de integración a ERP',
@@ -598,19 +636,21 @@ function buildDoc(modo){
   const p=PLANES[state.plan];
   const cli=(document.getElementById('cliente').value||'').trim();
   const fecha=new Date().toLocaleDateString('es-DO',{day:'numeric',month:'long',year:'numeric'});
-  const di=[['Paquete estándar de implementación','1',1500,1500],...detail(IMPL)];
-  const plan=precioPlan(p), sinMsg=!state.inc.msg, sinMin=!state.inc.min;
-  const nomPlan=`Plan ${p.nom}`+(sinMsg&&sinMin?' sin mensajes ni minutos':sinMsg?' sin mensajes':sinMin?' sin minutos':'');
+  const di=[[`Paquete de implementación · Plan ${p.nom}`,'1',p.impl,p.impl]];
+  if(state.desde) di.push([`Upgrade: implementación del Plan ${PLANES[state.desde].nom} ya pagada`,'1',-credito(),-credito()]);
+  di.push(...detail(IMPL));
+  const plan=precioPlan(p), nMsg=cant(p,'msg'), nMin=cant(p,'min'), sinMsg=!nMsg, sinMin=!nMin;
+  const nomPlan=`Plan ${p.nom} · `+textoIncluye(p);
   const dm=[[nomPlan,'1',plan,plan],['Mantenimiento mensual','1',p.mant,p.mant],...detail(MENS)];
   const ti=di.reduce((a,x)=>a+x[3],0), tm=dm.reduce((a,x)=>a+x[3],0);
   const cI=ti*COM.impl/100, cM=p.mant*COM.mant/100;
 
   let h=`<div class="dh"><img src="${LOGO}" alt="NEBO AI"><div>
       <div class="t">Cotización de servicios</div>
-      <div class="s">Agentes de inteligencia artificial · Plan ${p.nom}</div></div>
+      <div class="s">Agentes de inteligencia artificial · ${state.desde?`Upgrade del Plan ${PLANES[state.desde].nom} al Plan ${p.nom}`:`Plan ${p.nom}`}</div></div>
       <div class="meta"><b>${cli||'Cliente: ____________________'}</b><br>${fecha}<br>
       ${modo==='canal'?'Documento interno del closer':'Cotización comercial'}</div></div>`;
-  h+=`<p class="note" style="margin-top:12px">El plan ${p.nom} incluye ${sinMsg?'':p.msg.toLocaleString('en-US')+' mensajes salientes al mes, '}${sinMin?'':p.min+' minutos de voz al mes, '}una cuenta, una sucursal, un número de WhatsApp, un usuario administrador y 5 GB de almacenamiento.</p>`;
+  h+=`<p class="note" style="margin-top:12px">El plan ${p.nom} incluye ${sinMsg?'':nMsg.toLocaleString('en-US')+' mensajes salientes al mes, '}${sinMin?'':nMin.toLocaleString('en-US')+' minutos de voz al mes, '}una cuenta, una sucursal, un número de WhatsApp, un usuario administrador y 5 GB de almacenamiento.</p>`;
   h+=tabla('Implementación · pago único',di,ti,'Total de implementación');
   h+=tabla('Servicio mensual',dm,tm,'Total mensual');
   h+=`<div class="com solo-canal"><h4>Comisión del closer</h4><table><tbody>
